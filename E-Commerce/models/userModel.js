@@ -49,6 +49,10 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "user"],
       default: "user",
     },
+    isVerified:{
+      type: Boolean,
+      default: false,
+    },
     orders: [
       {
         type: Schema.Types.ObjectId,
