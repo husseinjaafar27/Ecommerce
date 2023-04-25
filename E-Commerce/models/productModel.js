@@ -9,13 +9,14 @@ const productSchema = new mongoose.Schema(
     userID: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      // required: true
     },
     productName: {
       type: String,
       required: [true, "Product name is required"],
       trim: true,
       maxlength: 50,
+      unique: true,
     },
     description: {
       type: String,
@@ -38,7 +39,7 @@ const productSchema = new mongoose.Schema(
       trim: true,
       maxlength: [32, "Too long price"],
     },
-    quantity:{
+    quantity: {
       type: Number,
       required: [true, "Product quantity is required"],
     },
@@ -50,7 +51,7 @@ const productSchema = new mongoose.Schema(
       default: 0,
     },
     category: {
-      type:String,
+      type: String,
       // type: Schema.Types.ObjectId,
       // ref: "Category",
       required: [true, "Product must be belong to a category"],

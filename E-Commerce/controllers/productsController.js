@@ -14,6 +14,8 @@ exports.createProduct = async (req, res) => {
       available: req.body.available,
       userID: req.user._id,
     });
+    // newProduct.productID = newProduct._id;
+    await newProduct.save();
     return res
       .status(201)
       .json({ message: "Product created", data: newProduct });

@@ -12,8 +12,9 @@ const orderSchema = new mongoose.Schema(
     },
     cartItems: [
       {
-        type: Schema.Types.ObjectId,
-        ref: "Cart",
+        // type: Schema.Types.ObjectId,
+        // ref: "Cart",
+        type: {},
         count: { type: Number, default: 1 },
       },
     ],
@@ -32,8 +33,8 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["pending", "cancelled", "completed"],
-      default: "Pending",
+      enum: ["pending", "cancelled", "completed","shipped, delivered"],
+      default: "pending",
     },
     deliveredAt: {
       type: Date,
