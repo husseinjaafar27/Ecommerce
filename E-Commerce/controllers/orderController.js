@@ -2,7 +2,7 @@ const Order = require("../models/orderModel");
 const User = require("../models/userModel");
 const Cart = require("../models/cartModel");
 const Product = require("../models/productModel");
-const { sendMail, sendMailInvoice } = require("../utils/sendGrid-email");
+const { sendMailInvoice } = require("../utils/sendGrid-email");
 const mongoose = require("mongoose");
 
 exports.createOrder = async (req, res) => {
@@ -65,6 +65,9 @@ exports.updateOrder = async (req, res) => {
     if (order.status === "completed") {
       return res.status(400).json({ message: "Order already completed" });
     }
+    if (order.isVisible === false) {
+      return res.status(400).json({ message: "Order is deleted" });
+    }
     const updateOrder = await Order.findByIdAndUpdate(
       order._id,
       {
@@ -107,11 +110,10 @@ exports.cancelOrder = async (req, res) => {
     if (order.status === "delivered") {
       return res.status(400).json({ message: "Order already delivered" });
     }
+    order.isVisible = false;
+    await order.save();
 
     await Cart.deleteOne({ cartOwner: req.user._id });
-
-    // ///////////////////////////////
-    await Order.deleteOne({ _id: order._id });
 
     return res.status(200).json({
       message: "order cancelled successfully",
@@ -123,32 +125,47 @@ exports.cancelOrder = async (req, res) => {
 
 // If the client complete his order,  he can't update it again
 exports.markOrderCompleted = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
   try {
     const id = req.params.id;
-    const checkOrder = await Order.findById(id);
+    const checkOrder = await Order.findById(id).session(session);
     if (!checkOrder) {
       return res.status(404).json({ message: "Order not found" });
     }
-
     if (checkOrder.orderOwner._id.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: "You are not authorized" });
     }
     if (checkOrder.status === "completed") {
       return res.status(401).json({ message: "Order already completed" });
     }
+
     const order = await Order.findByIdAndUpdate(
       id,
       { status: req.body.status },
       { new: true }
-    );
+    ).session(session);
 
-    order.cartItems.forEach(async (item) => {
-      await updateStock(item.product, item.quantity);
-    });
-    await Cart.deleteOne({ cartOwner: req.user.id });
-
-    return res.status(200).json({ message: "order completed" });
+    for (const item of order.cartItems) {
+      const product = await Product.findById(item.product).session(session);
+      if (product.quantity < item.quantity) {
+        await session.abortTransaction();
+        session.endSession();
+        return res
+          .status(409)
+          .json({ message: "Sorry we don't have the requested quantity" });
+      }
+      product.quantity -= item.quantity;
+      product.soldQuantity += item.quantity;
+      await product.save();
+    }
+    await Cart.deleteOne({ cartOwner: req.user.id }).session(session);
+    await session.commitTransaction();
+    session.endSession();
+    return res.status(200).json({ message: "Order completed" });
   } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
     console.log(err);
     return res.status(500).json({
       success: false,
@@ -156,12 +173,6 @@ exports.markOrderCompleted = async (req, res) => {
     });
   }
 };
-async function updateStock(id, quantity) {
-  const product = await Product.findById(id);
-  product.quantity -= quantity;
-  product.soldQuantity += quantity;
-  await product.save({ validateBeforeSave: false });
-}
 
 //  Update Order Status by admin
 exports.orderStatus = async (req, res) => {

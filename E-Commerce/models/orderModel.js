@@ -33,7 +33,7 @@ const orderSchema = new mongoose.Schema(
     status: {
       type: String,
       required: true,
-      enum: ["pending", "cancelled", "completed","shipped, delivered"],
+      enum: ["pending", "cancelled", "completed", "shipped, delivered"],
       default: "pending",
     },
     deliveredAt: {
@@ -42,6 +42,10 @@ const orderSchema = new mongoose.Schema(
     isDelivered: {
       type: Boolean,
       default: false,
+    },
+    isVisible: {
+      type: Boolean,
+      default: true,
     },
     address: {
       id: { type: Schema.Types.ObjectId, ref: "User" },

@@ -43,6 +43,11 @@ exports.addToCart = async (req, res) => {
     );
 
     if (productIndex > -1) {
+      if (product.quantity == cart.products[productIndex].quantity) {
+        return res
+          .status(409)
+          .json({ message: "The requested quantity is not available" });
+      }
       const cartItem = cart.products[productIndex];
       cartItem.quantity += 1;
       cart.products[productIndex] = cartItem;
