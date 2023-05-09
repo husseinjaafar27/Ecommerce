@@ -1,20 +1,54 @@
-const User = require("../models/userModel");
 const Product = require("../models/productModel");
 
 exports.createProduct = async (req, res) => {
   try {
+    const {
+      productName,
+      description,
+      quantity,
+      image,
+      price,
+      category,
+      // brand,
+    } = req.body;
+    if (
+      !productName ||
+      !description ||
+      !quantity ||
+      !image ||
+      !price ||
+      !category
+      // !brand
+    ) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const checkProduct = await Product.findOne({ productName });
+    if (checkProduct) {
+      return res
+        .status(400)
+        .json({ message: "Product name is already in use" });
+    }
+    if (productName.length > 50) {
+      return res
+        .status(400)
+        .json({ message: "Product name should be less than 50 letters" });
+    }
+    if (description.length > 2000) {
+      return res
+        .status(400)
+        .json({ message: "Description should be less than 2000 letters" });
+    }
+
     const newProduct = await Product.create({
-      productName: req.body.productName,
-      description: req.body.description,
-      quantity: req.body.quantity,
-      image: req.body.image,
-      price: req.body.price,
-      category: req.body.category,
-      brand: req.body.brand,
-      available: req.body.available,
+      productName,
+      description,
+      quantity,
+      image,
+      price,
+      category,
+      // brand,
       userID: req.user._id,
     });
-    // newProduct.productID = newProduct._id;
     await newProduct.save();
     return res
       .status(201)
@@ -27,28 +61,38 @@ exports.createProduct = async (req, res) => {
 exports.updateProduct = async (req, res) => {
   const { id } = req.params;
   if (!id) {
-    return res.status(404).json({ message: "The product ID is required" });
+    return res.status(400).json({ message: "The product ID is required" });
+  }
+  const { productName, description, quantity, image, price, available } =
+    req.body;
+  const product = await Product.findById(id);
+  if (!product) {
+    return res.status(404).json({ message: "Product not found" });
+  }
+  const productN = await Product.findOne({ productName, _id: { $ne: id } });
+  if (productName) {
+    if (productN)
+      return res
+        .status(404)
+        .json({ message: "Product name is already in use" });
   }
 
   try {
     const updateProduct = await Product.findByIdAndUpdate(
       id,
       {
-        productName: req.body.productName,
-        description: req.body.description,
-        quantity: req.body.quantity,
-        image: req.body.image,
-        price: req.body.price,
-        available: req.body.available,
+        productName: productName || product.productName,
+        description: description || product.description,
+        quantity: quantity || product.quantity,
+        image: image || product.image,
+        price: price || product.price,
+        available: available || product.available,
       },
       { new: true }
     );
-    if (!updateProduct) {
-      return res.status(404).json({ message: "The product does not exist" });
-    }
     return res
       .status(200)
-      .json({ message: "Product updated susseffuly", data: updateProduct });
+      .json({ message: "Product updated successfully", data: updateProduct });
   } catch (err) {
     return res.status(400).json({ message: err.message });
   }
@@ -56,10 +100,13 @@ exports.updateProduct = async (req, res) => {
 
 exports.getAllProducts = async (req, res) => {
   try {
-    const allProducts = await Product.find();
+    const allProducts = await Product.find().sort({ createdAt: -1 });
+    if (allProducts.length < 1) {
+      return res.status(404).json({ message: "No products found" });
+    }
     return res
       .status(201)
-      .json({ message: "Product found", data: allProducts });
+      .json({ message: "Products found", data: allProducts });
   } catch (err) {
     return res.status(400).json({ message: err.message });
   }
@@ -75,7 +122,7 @@ exports.filterItem = async (req, res) => {
     if (price && price.length)
       filter.price = { $gte: price[0], $lte: price[1] };
 
-    if (quantity && quantity.length) filter.quantity = { $gte: quantity };
+    if (quantity) filter.quantity = { $gte: quantity };
 
     const products = await Product.find(filter);
     if (products.length <= 0) {
@@ -95,9 +142,15 @@ exports.filterItem = async (req, res) => {
 
 exports.deleteProduct = async (req, res) => {
   const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ message: "The product ID is required" });
+  }
   try {
-    await Product.findByIdAndDelete(id);
-    return res.status(200).json({ message: "Product deleted successully" });
+    const product = await Product.findByIdAndDelete(id);
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    return res.status(200).json({ message: "Product deleted successfully" });
   } catch (error) {
     return res.status(400).send(error.message);
   }

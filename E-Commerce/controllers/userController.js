@@ -5,7 +5,10 @@ const bcrypt = require("bcrypt");
 // get one user
 exports.getUser = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id);
+    if (!req.params.id) {
+      return res.status(400).json({ message: "The user ID is required" });
+    }
+    const user = await User.findById(req.params.id).select("-password");
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -26,7 +29,7 @@ exports.getAllUsers = async (req, res) => {
       return res.status(404).json({ message: "Users not found" });
     }
 
-    res.status(200).json(user);
+    return res.status(200).json(user);
   } catch (err) {
     console.log(err);
     return res.status(500).json({
@@ -41,7 +44,12 @@ exports.updateUser = async (req, res) => {
     const { firstName, lastName, address, phoneNumber } = req.body;
     const result = await User.findByIdAndUpdate(
       req.user._id,
-      { firstName, lastName, address, phoneNumber },
+      {
+        firstName: firstName || req.user.firstName,
+        lastName: lastName || req.user.lastName,
+        address: address || req.user.address,
+        phoneNumber: phoneNumber || req.user.phoneNumber,
+      },
       { new: true }
     );
 
@@ -58,6 +66,9 @@ exports.updateUser = async (req, res) => {
 exports.deleteUser = async (req, res) => {
   try {
     const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ message: "The user ID is required" });
+    }
     const deletedUser = await User.findByIdAndDelete(id);
     if (!deletedUser) {
       return res.status(404).json({ message: "User not found" });
@@ -75,31 +86,72 @@ exports.deleteUser = async (req, res) => {
 // create new user by admin
 exports.createUser = async (req, res) => {
   try {
-    const emailCheck = await User.findOne({ email: req.body.email });
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      passwordConfirm,
+      address,
+      phoneNumber,
+      role,
+      isVerified,
+    } = req.body;
+
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password ||
+      !passwordConfirm ||
+      !address ||
+      !phoneNumber ||
+      !role ||
+      !isVerified
+    ) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    const emailCheck = await User.findOne({ email });
     if (emailCheck) {
       return res.status(409).json({ message: "The email is already in use" });
     }
+    if (firstName.length < 3 || firstName.length > 30) {
+      return res
+        .status(400)
+        .json({ message: "First name should be between 3 and 30" });
+    }
+    if (lastName.length < 3 || lastName.length > 30) {
+      return res
+        .status(400)
+        .json({ message: "Last name should be between 3 and 30" });
+    }
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ message: "Password should be equal or greater than 8" });
+    }
 
-    if (!validator.isEmail(req.body.email)) {
+    if (!validator.isEmail(email)) {
       return res.status(400).json({ message: "The email is not valid" });
     }
 
-    if (req.body.password !== req.body.passwordConfirm) {
+    if (password !== passwordConfirm) {
       return res
         .status(400)
         .json({ message: "password and password confirm don't match" });
     }
 
     const newUser = await User.create({
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      email: req.body.email,
-      password: req.body.password,
-      passwordConfirm: req.body.passwordConfirm,
-      address: req.body.address,
-      phoneNumber: req.body.phoneNumber,
-      role: req.body.role,
-      isVerified: req.body.isVerified,
+      firstName,
+      lastName,
+      email,
+      password,
+      passwordConfirm,
+      address,
+      phoneNumber,
+      role,
+      isVerified,
     });
 
     return res.status(201).json({
@@ -121,8 +173,11 @@ exports.ResetUserInfo = async (req, res) => {
   try {
     const { firstName, lastName, password, address, phoneNumber, role } =
       req.body;
-    const { userId } = req.params;
 
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ message: "The user ID is required" });
+    }
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -130,7 +185,9 @@ exports.ResetUserInfo = async (req, res) => {
 
     // if password is existing
     if (password && password.length < 8) {
-      return res.json({ error: "Password is required and 8 character long" });
+      return res
+        .status(400)
+        .json({ message: "Password is required and 8 character long" });
     }
 
     const hashedPassword = password

@@ -23,37 +23,75 @@ const createSendToken = (user, statusCode, res) => {
 
 exports.signup = async (req, res) => {
   try {
-    const emailCheck = await User.findOne({ email: req.body.email });
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      passwordConfirm,
+      address,
+      phoneNumber,
+      role,
+    } = req.body;
+
+    if (
+      !firstName ||
+      !lastName ||
+      !email ||
+      !password ||
+      !passwordConfirm ||
+      !address ||
+      !phoneNumber
+    ) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+    const emailCheck = await User.findOne({ email });
     if (emailCheck) {
-      return res.status(409).json({ message: "The email is already in use" });
+      return res.status(400).json({ message: "The email is already in use" });
+    }
+
+    if (firstName.length < 3 || firstName.length > 30) {
+      return res
+        .status(400)
+        .json({ message: "First name should be between 3 and 30" });
+    }
+    if (lastName.length < 3 || lastName.length > 30) {
+      return res
+        .status(400)
+        .json({ message: "Last name should be between 3 and 30" });
+    }
+    if (password.length < 8) {
+      return res
+        .status(400)
+        .json({ message: "Password should be equal or greater than 8" });
     }
 
     if (!validator.isEmail(req.body.email)) {
       return res.status(400).json({ message: "The email is not valid" });
     }
 
-    if (req.body.password !== req.body.passwordConfirm) {
+    if (password !== passwordConfirm) {
       return res
         .status(400)
         .json({ message: "password and password confirm don't match" });
     }
     const newUser = await User.create({
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      email: req.body.email,
-      username: req.body.username,
-      password: req.body.password,
-      passwordConfirm: req.body.passwordConfirm,
-      address: req.body.address,
-      phoneNumber: req.body.phoneNumber,
-      role: req.body.role,
-      moneySpent: req.body.moneySpent,
+      firstName,
+      lastName,
+      email,
+      password,
+      passwordConfirm,
+      address,
+      phoneNumber,
+      role,
     });
 
     // sent verfied email
     const validity = newUser.generateValidity();
     await newUser.save({ validateBeforeSave: false });
-    const url = `${req.protocol}://${req.get("host")}/validateUser/${validity}`;
+    const url = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/auth/validateUser/${validity}`;
     const msg = `validate your account using this link ${url}`;
     try {
       await sendMail(
@@ -73,18 +111,18 @@ exports.signup = async (req, res) => {
       .status(201)
       .json({ success: true, message: "Validation email sent successfully" });
   } catch (err) {
-    res.status(500).json({ message: err.message });
     console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
 exports.validateUser = async (req, res) => {
   try {
+    const { password } = req.body;
     const hashedToken = crypto
       .createHash("sha256")
       .update(req.params.token)
       .digest("hex");
-    console.log(hashedToken);
     const user = await User.findOne({
       validationToken: hashedToken,
       validationExpires: { $gt: Date.now() },
@@ -94,18 +132,18 @@ exports.validateUser = async (req, res) => {
         .status(400)
         .json({ message: "token invalid or expired request a new one" });
     }
-    if (req.body.password.length < 8) {
-      return res.status(400).json({ message: "Password length is too short" });
+    if (!password) {
+      return res.status(400).json({ message: "All Fields are required" });
     }
-
-    if (req.body.password !== req.body.passwordConfirm) {
+    if (!(await user.checkPassword(password, user.password))) {
+      return res.status(401).json({ message: "Incorrect password" });
+    }
+    if (password.length < 8) {
       return res
         .status(400)
-        .json({ message: "Password & Password Confirm are not the same" });
+        .json({ message: "Password should be equal or greater than 8" });
     }
 
-    user.password = req.body.password;
-    user.passwordConfirm = req.body.passwordConfirm;
     user.isVerified = true;
     user.validationToken = undefined;
     user.validationExpires = undefined;
@@ -116,12 +154,16 @@ exports.validateUser = async (req, res) => {
       .json({ success: true, message: "Your account has been verified" });
   } catch (err) {
     console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
 exports.login = async (req, res) => {
   try {
     const { email } = req.body;
+    if (!email || !req.body.password) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -138,13 +180,18 @@ exports.login = async (req, res) => {
     createSendToken(others, 201, res);
   } catch (err) {
     console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
 // forgot password
 exports.forgotPassword = async (req, res) => {
   try {
-    const user = await User.findOne({ email: req.body.email });
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+    const user = await User.findOne({ email });
     if (!user) {
       return res
         .status(404)
@@ -156,7 +203,7 @@ exports.forgotPassword = async (req, res) => {
 
     const url = `${req.protocol}://${req.get(
       "host"
-    )}/resetPassword/${resetToken}`;
+    )}/api/v1/auth/resetPassword/${resetToken}`;
     const msg = `Forgot password?reset bs visiting this link ${url}`;
 
     try {
@@ -175,11 +222,16 @@ exports.forgotPassword = async (req, res) => {
     }
   } catch (err) {
     console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };
 
 exports.resetPassword = async (req, res) => {
   try {
+    const { password, passwordConfirm } = req.body;
+    if (!password || !passwordConfirm) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
     const hashedToken = crypto
       .createHash("sha256")
       .update(req.params.token)
@@ -195,19 +247,22 @@ exports.resetPassword = async (req, res) => {
         message: "The token is invalid, or expired. Please request a new one",
       });
     }
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
 
-    if (req.body.password.length < 8) {
+    if (password.length < 8) {
       return res.status(400).json({ message: "Password length is too short" });
     }
 
-    if (req.body.password !== req.body.passwordConfirm) {
+    if (password !== passwordConfirm) {
       return res
         .status(400)
         .json({ message: "Password & Password Confirm are not the same" });
     }
 
-    user.password = req.body.password;
-    user.passwordConfirm = req.body.passwordConfirm;
+    user.password = password;
+    user.passwordConfirm = passwordConfirm;
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     user.passwordChangedAt = Date.now();
@@ -216,5 +271,6 @@ exports.resetPassword = async (req, res) => {
     return res.status(200).json({ message: "Password changed successfully" });
   } catch (err) {
     console.log(err);
+    return res.status(500).json({ message: err.message });
   }
 };

@@ -7,7 +7,10 @@ const mongoose = require("mongoose");
 
 exports.createOrder = async (req, res) => {
   try {
-    const { status, details, phone, city } = req.body;
+    const { details, phone, city } = req.body;
+    if (!details || !phone || !city) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
     const orderOwner = await User.findOne({ _id: req.user._id }).select(
       "firstName lastName "
     );
@@ -65,6 +68,12 @@ exports.updateOrder = async (req, res) => {
     if (order.status === "completed") {
       return res.status(400).json({ message: "Order already completed" });
     }
+    if (order.status === "shipped") {
+      return res.status(400).json({ message: "Order already shipped" });
+    }
+    if (order.status === "delivered") {
+      return res.status(400).json({ message: "Order already delivered" });
+    }
     if (order.isVisible === false) {
       return res.status(400).json({ message: "Order is deleted" });
     }
@@ -97,6 +106,9 @@ exports.updateOrder = async (req, res) => {
 exports.cancelOrder = async (req, res) => {
   try {
     const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ message: "The order ID is required" });
+    }
     const order = await Order.findById(id);
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
@@ -109,6 +121,9 @@ exports.cancelOrder = async (req, res) => {
     }
     if (order.status === "delivered") {
       return res.status(400).json({ message: "Order already delivered" });
+    }
+    if (order.isVisible === false) {
+      return res.status(400).json({ message: "Order is deleted" });
     }
     order.isVisible = false;
     await order.save();
@@ -129,6 +144,9 @@ exports.markOrderCompleted = async (req, res) => {
   session.startTransaction();
   try {
     const id = req.params.id;
+    if (!id) {
+      return res.status(400).json({ message: "The order ID is required" });
+    }
     const checkOrder = await Order.findById(id).session(session);
     if (!checkOrder) {
       return res.status(404).json({ message: "Order not found" });
@@ -155,9 +173,11 @@ exports.markOrderCompleted = async (req, res) => {
           .status(409)
           .json({ message: "Sorry we don't have the requested quantity" });
       }
+      order.status = "completed";
       product.quantity -= item.quantity;
       product.soldQuantity += item.quantity;
       await product.save();
+      await order.save();
     }
     await Cart.deleteOne({ cartOwner: req.user.id }).session(session);
     await session.commitTransaction();
@@ -177,8 +197,10 @@ exports.markOrderCompleted = async (req, res) => {
 //  Update Order Status by admin
 exports.orderStatus = async (req, res) => {
   try {
+    if (!req.params.id) {
+      return res.status(400).json({ message: "The order ID is required" });
+    }
     const order = await Order.findById(req.params.id);
-
     if (!order) {
       return res.status(404).json({ message: "Order not found with this Id" });
     }
@@ -219,6 +241,9 @@ exports.orderStatus = async (req, res) => {
 
 exports.emailInvoice = async (req, res) => {
   try {
+    if (!req.params.id) {
+      return res.status(400).json({ message: "The order ID is required" });
+    }
     const checkOrder = await Order.findById(req.params.id).populate(
       "cartItems",
       "products"
@@ -226,8 +251,8 @@ exports.emailInvoice = async (req, res) => {
     if (!checkOrder) {
       return res.status(404).json({ message: "Order not exist" });
     }
-    if (checkOrder.status !== "completed") {
-      return res.status(400).json({ message: "Order is not completed" });
+    if (checkOrder.status !== "shipped") {
+      return res.status(400).json({ message: "Order is not shipped" });
     }
     const user = await User.findOne(checkOrder.orderOwner.email);
     // send email
@@ -245,9 +270,11 @@ exports.emailInvoice = async (req, res) => {
 
     const email = items
       .map((item) => {
-        return `<ul><li>Product:${item.product}  Quality:${
-          item.quantity
-        }  Price:${item.price * item.quantity}</li></ul>`;
+        return `<ul>
+                  <li>
+                    Product: ${item.product} | Quantity: ${item.quantity} | Price: ${item.price}/pc
+                  </li>
+                </ul>`;
       })
       .join("");
 

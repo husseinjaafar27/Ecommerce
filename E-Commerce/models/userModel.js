@@ -36,7 +36,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       minLength: 8,
       trim: true,
-      required: [true, "Please confrim your password"],
     },
     address: {
       type: String,
@@ -138,3 +137,4 @@ userSchema.methods.passwordChangedAfterTokenIssued = function (JWTTimestamp) {
 };
 
 module.exports = mongoose.model("User", userSchema);
+

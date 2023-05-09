@@ -8,6 +8,9 @@ exports.addToCart = async (req, res) => {
     if (!cartOwner) {
       return res.status(404).json({ message: "A cart should have an owner" });
     }
+    if (!req.body.product) {
+      return res.status(400).json({ message: "The product ID is required" });
+    }
     const cart = await Cart.findOne({ cartOwner: cartOwner._id });
     const product = await Product.findOne({ _id: req.body.product });
     if (!product) {
@@ -73,6 +76,9 @@ exports.addToCart = async (req, res) => {
 
 exports.removeFromCart = async (req, res) => {
   try {
+    if (!req.body.product) {
+      return res.status(400).json({ message: "The product ID is required" });
+    }
     const cart = await Cart.findOne({ cartOwner: req.user._id });
     const product = await Product.findById(req.body.product);
     if (!product) {
@@ -118,6 +124,9 @@ exports.checkOutCart = async (req, res) => {
     const cart = await Cart.findOne({ cartOwner: req.user._id }).select(
       "products totalCartPrice"
     );
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
     const user = req.user;
     const details = {
       fullName: user.fullName + " " + user.lastName,
@@ -141,6 +150,9 @@ exports.checkOutCart = async (req, res) => {
 exports.checkAvailability = async (req, res) => {
   try {
     const Item = req.body.itemId;
+    if (!Item) {
+      return res.status(400).json({ message: "The product ID is required" });
+    }
     const product = await Product.findById(Item);
     if (!product) {
       return res.status(401).json({ message: "Product not exist" });
